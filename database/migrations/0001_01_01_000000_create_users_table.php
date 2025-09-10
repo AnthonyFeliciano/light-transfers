@@ -12,10 +12,11 @@ return new class extends Migration
             $t->uuid('id')->primary();
             $t->string('name');
             $t->string('email')->unique();
-            $t->unsignedBigInteger('document')->unique(); 
+            $t->string('document', 14)->unique(); 
             $t->timestamp('email_verified_at')->nullable();
             $t->string('password');
             $t->enum('role', ['user','merchant'])->index();
+            $t->rememberToken()->nullable();
             $t->timestamps();
             $t->softDeletes();
         });

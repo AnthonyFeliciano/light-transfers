@@ -1,4 +1,4 @@
-<?php 
+<?php
 
 namespace App\Services;
 
@@ -6,21 +6,28 @@ use App\Services\Contracts\AuthorizationClientContract;
 use Illuminate\Support\Facades\Http;
 
 class AuthorizationClient implements AuthorizationClientContract
-{ 
-
+{
     public function authorize(): bool
     {
+        try {
+            $resp = Http::acceptJson()
+                ->timeout(6)
+                ->retry(2, 200, throw: false)
+                ->get('https://util.devi.tools/api/v2/authorize');
 
-        $response = Http::timeout(6)->retry(3, 200)->get('https://util.devi.tools/api/v2/authorize');
+            $status = $resp->status();
 
-        if(!$response->ok()) {
+            if ($status === 200) {
+                $ok = (bool) data_get($resp->json(), 'data.authorization', false);
+                return $ok;
+            }
+
+            if ($status === 403) {
+                return false;
+            }
+            return false;
+        } catch (\Throwable $e) {
             return false;
         }
-
-        $json = $response->json();
-
-        return isset(['data']['authorization']) ? (bool) $json['data']['authorization'] : false;
-
     }
-    
 }

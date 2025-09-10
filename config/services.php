@@ -35,4 +35,6 @@ return [
         ],
     ],
 
+    'url' => env('AUTHORIZER_URL', 'https://util.devi.tools/api/v2/authorize')
+
 ];
