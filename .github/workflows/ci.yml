@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, bcmath, intl, pdo_sqlite, sqlite3
+          coverage: none
+          tools: composer:v2
+
+      - name: Install Composer deps (cached)
+        uses: ramsey/composer-install@v3
+        with:
+          composer-options: --no-interaction --prefer-dist
+
+      - name: Prepare .env (testing c/ SQLite)
+        run: |
+          cp .env.example .env
+          # APP_ENV=testing
+          sed -i 's/^APP_ENV=.*/APP_ENV=testing/' .env
+          # SQLite + caminho absoluto do arquivo
+          sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=sqlite/' .env
+          sed -i "s|^DB_DATABASE=.*|DB_DATABASE=$(pwd)/database/database.sqlite|" .env
+          # Liga constraints de FK no SQLite
+          grep -q '^DB_FOREIGN_KEYS=' .env && sed -i 's/^DB_FOREIGN_KEYS=.*/DB_FOREIGN_KEYS=true/' .env || echo 'DB_FOREIGN_KEYS=true' >> .env
+          php artisan key:generate
+          php artisan config:clear
+
+      - name: Create SQLite file & migrate
+        run: |
+          mkdir -p database
+          touch database/database.sqlite
+          php artisan migrate --force
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: NPM ci + build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload built assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-build
+          path: public/build
+
+      - name: Run tests (placeholder)
+        run: php -v && php artisan --version
