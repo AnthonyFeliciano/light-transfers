@@ -4,7 +4,7 @@
     $cutShown = false;
   @endphp
 
-  {{-- CARD: Saldo (azul estilo dashboard) --}}
+  {{-- CARD: Saldo --}}
   <div class="rounded-2xl p-8 lg:p-10 shadow-sm ring-1 ring-sky-700/20 bg-gradient-to-r from-sky-600 to-indigo-600 text-white">
     <div class="flex items-end justify-between gap-6">
       <div>
@@ -13,7 +13,9 @@
           R$ {{ number_format($balance, 2, ',', '.') }}
         </div>
       </div>
-
+      <span class="hidden sm:inline-flex h-9 items-center rounded-full px-3 text-sm bg-white/15 text-white ring-1 ring-white/20">
+        Atualizado agora
+      </span>
     </div>
   </div>
 
@@ -24,7 +26,8 @@
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
         <select wire:model.live="type"
-                class="rounded-xl border-slate-200 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 text-sm">
+                class="rounded-xl border-slate-200 px-3 py-2 text-sm shadow-sm
+                       focus:outline-none focus:ring-2 focus:ring-sky-600/20 focus:border-sky-600">
           <option value="">Todos</option>
           <option value="DEBIT">Débito</option>
           <option value="CREDIT">Crédito</option>
@@ -34,23 +37,25 @@
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1">De</label>
         <input type="date" wire:model.live="from"
-               class="rounded-xl border-slate-200 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 text-sm">
+               class="rounded-xl border-slate-200 px-3 py-2 text-sm shadow-sm
+                      focus:outline-none focus:ring-2 focus:ring-sky-600/20 focus:border-sky-600">
       </div>
 
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1">Até</label>
         <input type="date" wire:model.live="to"
-               class="rounded-xl border-slate-200 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 text-sm">
+               class="rounded-xl border-slate-200 px-3 py-2 text-sm shadow-sm
+                      focus:outline-none focus:ring-2 focus:ring-sky-600/20 focus:border-sky-600">
       </div>
 
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1">Itens/página</label>
         <select wire:model.live="perPage"
-                class="w-28 rounded-xl border-slate-200 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 text-sm">
-          <option value="10">10</option>
-          <option value="15">15</option>
-          <option value="25">25</option>
-          <option value="50">50</option>
+                class="w-28 rounded-xl border-slate-200 px-3 py-2 text-sm shadow-sm
+                       focus:outline-none focus:ring-2 focus:ring-sky-600/20 focus:border-sky-600">
+          @foreach([10,15,25,50] as $n)
+            <option value="{{ $n }}">{{ $n }}</option>
+          @endforeach
         </select>
       </div>
     </div>
@@ -69,7 +74,7 @@
         <tbody class="divide-y divide-slate-200 bg-white">
           @if ($rows->count() > 0)
             @foreach ($rows as $r)
-              {{-- Separador "15 dias atrás" (primeira linha anterior ao corte) --}}
+              {{-- Separador "15 dias atrás" --}}
               @if (!$cutShown && $r->created_at->lt($cutDate))
                 @php $cutShown = true; @endphp
                 <tr>
@@ -89,23 +94,19 @@
               @php
                 $userId = auth()->id();
 
-                // 1) Preferência: direção da transferência (mais confiável)
+                // Direção: preferir dados da transferência; fallback para o type
                 $hasTransfer = isset($r->transfer_id) && $r->relationLoaded('transfer') && $r->transfer;
                 if ($hasTransfer) {
-                    $isOut = ($r->transfer->payer_id === $userId); // você enviou?
+                    $isOut = ($r->transfer->payer_id === $userId); // você enviou
                 } else {
-                    // 2) Fallback: normaliza type
                     $rawType = strtoupper((string)($r->type ?? ''));
-                    $isOut = in_array($rawType, ['DEBIT','D','DEBITO','DÉBITO'], true);
+                    $isOut   = in_array($rawType, ['DEBIT','D','DEBITO','DÉBITO'], true);
                 }
 
-                // 3) Valor com sinal (usa abs() para não duplicar sinal caso já venha negativo)
                 $sign   = $isOut ? '-' : '+';
                 $amount = $sign.' R$ '.number_format(abs((float)$r->amount), 2, ',', '.');
 
-                // 4) Cores e labels
-                $valCls    = $isOut ? 'text-rose-600' : 'text-emerald-600';
-                $opCls     = $isOut ? 'text-rose-700' : 'text-emerald-700';
+                $valCls    = $isOut ? 'text-rose-600'     : 'text-emerald-600';
                 $badge     = $isOut ? 'bg-rose-50 text-rose-700 ring-rose-200'
                                     : 'bg-emerald-50 text-emerald-700 ring-emerald-200';
                 $typeLabel = $isOut ? 'Débito' : 'Crédito';
@@ -114,21 +115,14 @@
               <tr class="hover:bg-slate-50/70" wire:key="row-{{ $r->id ?? $r->created_at->timestamp }}-{{ $loop->index }}">
                 <td class="px-4 py-3 text-slate-700">{{ $r->created_at->format('d/m/Y H:i') }}</td>
 
-                {{-- Tipo + nome da operação (em vermelho/verde) --}}
                 <td class="px-4 py-3">
-                  <div class="flex items-center gap-2">
-                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ring-1 {{ $badge }}">
-                      {{ $typeLabel }}
-                    </span>
-                  </div>
+                  <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ring-1 {{ $badge }}">
+                    {{ $typeLabel }}
+                  </span>
                 </td>
 
-                {{-- Coluna "Transferência" --}}
-                <td class="px-4 py-3">
-                  <span class="text-slate-600">{{ $r->transfer_id ?? '—' }}</span>
-                </td>
+                <td class="px-4 py-3 text-slate-600">{{ $r->transfer_id ?? '—' }}</td>
 
-                {{-- Valor com sinal e cor --}}
                 <td class="px-4 py-3 text-right font-medium {{ $valCls }}">{{ $amount }}</td>
               </tr>
             @endforeach
@@ -150,7 +144,7 @@
       </table>
     </div>
 
-    {{-- Paginação --}}
+    {{-- Paginação (padrão custom) --}}
     <div class="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
       <div class="text-xs text-slate-500">
         Mostrando
@@ -161,7 +155,9 @@
         <span class="font-medium text-slate-700">{{ $rows->total() }}</span>
         resultados
       </div>
-      {{ $rows->links() }}
+
+      {{-- mesmo componente de paginação usado nas outras telas --}}
+      {{ $rows->onEachSide(1)->links('components.pagination') }}
     </div>
   </div>
 </div>

@@ -137,6 +137,9 @@
       <span class="font-medium text-slate-700">{{ $rows->total() }}</span>
       resultados
     </div>
-    {{ $rows->links() }}
+
+    {{-- mesmo layout custom da outra tela --}}
+    {{ $rows->onEachSide(1)->links('components.pagination') }}
   </div>
+
 </div>

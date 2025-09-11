@@ -53,12 +53,10 @@
             <td class="px-4 py-3 font-medium text-slate-900">{{ $u->name }}</td>
             <td class="px-4 py-3 text-slate-700">{{ $u->email }}</td>
             <td class="px-4 py-3">
-              <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
-                           ring-1 {{ $badge }}">
+              <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 {{ $badge }}">
                 {{ strtoupper($u->role) }}
               </span>
             </td>
-
           </tr>
         @empty
           <tr>
@@ -90,7 +88,7 @@
       resultados
     </div>
 
-    {{-- custom pagination view --}}
+    {{-- mantém o layout custom, mas com hooks do Livewire --}}
     {{ $rows->onEachSide(1)->links('components.pagination') }}
   </div>
 </div>
