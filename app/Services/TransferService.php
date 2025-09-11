@@ -6,7 +6,6 @@ use App\Models\{LedgerEntry, Notification, Transfer, User, Wallet};
 use App\Services\Contracts\{AuthorizationClientContract, TransferServiceContract};
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use Illuminate\Support\Facades\Log;
 
 
 class TransferService implements TransferServiceContract
@@ -93,7 +92,8 @@ class TransferService implements TransferServiceContract
                 'receiver_id' => $payee->id,
                 'status'      => 'pending',
             ]);
-            // dispatch(new \App\Jobs\SendTransferNotificationJob($notification->id))->afterCommit();
+            
+            dispatch(new \App\Jobs\SendTransferNotificationJob($notification->id))->afterCommit();
 
             return $transfer;
         });
