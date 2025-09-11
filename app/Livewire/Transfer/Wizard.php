@@ -23,6 +23,9 @@ class Wizard extends Component
     public string $authMsg = '';
     public string $key = '';
 
+    /** Fallback para testes/telemetria de UI */
+    public ?array $lastToast = null;
+
     protected array $messages = [
         'identifier.required' => 'Informe o :attribute.',
         'identifier.string'   => 'O :attribute deve ser um texto.',
@@ -44,14 +47,23 @@ class Wizard extends Component
 
     private function fmtMoney(string|float $v): string
     {
-        $n = is_numeric($v) ? (float) $v
+        $n = is_numeric($v)
+            ? (float) $v
             : (float) str_replace(',', '.', preg_replace('/[^\d,\.]/', '', (string) $v));
+
         return 'R$ ' . number_format($n, 2, ',', '.');
     }
 
-    public function mount()
+    private function toast(string $type, string $msg): void
     {
-        $this->available = (string) (Auth::user()->wallet?->balance ?? '0.00');
+        $this->lastToast = ['type' => $type, 'msg' => $msg];
+        $this->dispatch('toast', type: $type, msg: $msg); // browser event (quando houver listener no front)
+    }
+
+    public function mount(): void
+    {
+        $bal = (float) (Auth::user()->wallet?->balance ?? 0);
+        $this->available = number_format($bal, 2, '.', '');
         $this->key = (string) Str::uuid();
     }
 
@@ -60,14 +72,13 @@ class Wizard extends Component
         return $this->payeeId ? User::find($this->payeeId) : null;
     }
 
-    public function findPayee()
+    public function findPayee(): void
     {
         $this->validate(['identifier' => ['required','string','min:3']]);
 
         $q = User::query()->where('id','!=', Auth::id());
         $clean = preg_replace('/\D/', '', $this->identifier ?? '');
 
-        // Busca por documento (CPF/CNPJ) ou por e-mail
         if (strlen($clean) >= 11) {
             $q->where('document', $clean);
         } else {
@@ -77,7 +88,6 @@ class Wizard extends Component
         $payee = $q->first();
 
         if (!$payee) {
-            // mensagem contextual: mostra o que o usuário digitou
             $typed = trim($this->identifier);
             $hint  = strlen($clean) >= 11
                 ? 'Confira o CPF/CNPJ informado.'
@@ -89,69 +99,66 @@ class Wizard extends Component
         $this->step = 2;
     }
 
-    public function validateAmount()
+    public function validateAmount(): void
     {
         $this->validate(['amount' => ['required','numeric','min:0.01']]);
 
-        // UX: mensagem dinâmica com saldo disponível
         if (bccomp((string)$this->available, (string)$this->amount, 2) < 0) {
-            $this->fail('amount',
+            $this->fail(
+                'amount',
                 'Saldo insuficiente. Você tem ' . $this->fmtMoney($this->available) .
-                '. Tente um valor igual ou menor que esse limite.');
+                '. Tente um valor igual ou menor que esse limite.'
+            );
         }
 
         $this->step = 3;
     }
 
-    public function confirm(TransferServiceContract $service, AuthorizationClientContract $auth)
+    public function confirm(TransferServiceContract $service, AuthorizationClientContract $auth): void
     {
         if (!$this->payeeId) {
             $this->fail('identifier', 'Selecione um destinatário antes de confirmar.');
         }
 
-        // Limpa mensagem anterior e tenta autorização
         $this->authMsg = '';
         $authorized = $auth->authorize();
 
         if (!$authorized) {
             $this->authMsg = 'Não conseguimos autorização para esta operação agora. Tente novamente em instantes.';
-            $this->dispatch('toast', type: 'error', msg: $this->authMsg);
+            $this->toast('error', $this->authMsg);
             return;
         }
 
-        // Executar (o service valida regras invariantes + idempotência)
         try {
             $transfer = $service->execute(
-                payerId: Auth::id(),
-                payeeId: $this->payeeId,
+                payerId: (string) Auth::id(),
+                payeeId: (string) $this->payeeId,
                 amount: (string) $this->amount,
                 key: $this->key
             );
 
-            $to   = $this->payee?->name ?: 'destinatário';
-            $val  = $this->fmtMoney($this->amount);
-            $this->dispatch('toast', type: 'success', msg: "Transferência de {$val} para {$to} concluída!");
+            $to  = $this->payee?->name ?: 'destinatário';
+            $val = $this->fmtMoney($this->amount);
+            $this->toast('success', "Transferência de {$val} para {$to} concluída!");
 
-            // Reset, recarrega saldo, gera nova chave, volta ao passo 1
             $this->reset('identifier','payeeId','amount','authMsg');
-            $this->available = (string) (User::find(Auth::id())?->wallet?->balance ?? '0.00');
-            $this->key = (string) Str::uuid();
+
+            $bal = (float) (User::find(Auth::id())?->wallet?->balance ?? 0);
+            $this->available = number_format($bal, 2, '.', '');
+
+            $this->key  = (string) Str::uuid();
             $this->step = 1;
 
             $this->dispatch('wallet-updated');
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            // Mostra a primeira mensagem de validação (já mapeada por campo)
-            $msg = collect($e->errors())->flatten()->first();
-            $this->dispatch('toast', type: 'error', msg: $msg ?: 'Não foi possível concluir a transferência.');
-
-            // Repropaga para preencher os erros nos inputs do Livewire
+            $msg = (string) (collect($e->errors())->flatten()->first() ?: 'Não foi possível concluir a transferência.');
+            $this->toast('error', $msg);
             throw $e;
 
         } catch (\Throwable $e) {
             report($e);
-            $this->dispatch('toast', type: 'error',
-                msg: 'Ocorreu um erro inesperado. Tente novamente em alguns segundos.');
+            $this->toast('error', 'Ocorreu um erro inesperado. Tente novamente em alguns segundos.');
         }
     }
 

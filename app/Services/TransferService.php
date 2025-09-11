@@ -12,7 +12,7 @@ class TransferService implements TransferServiceContract
 {
     public function __construct(private AuthorizationClientContract $auth) {}
 
-    private function validationException(string $msg, string $status = 'error',): never
+    private function validationException(string $msg= 'error', string $status = 'error',): never
     {
         throw ValidationException::withMessages(['status' => $status, 'message' => $msg]);
     }
